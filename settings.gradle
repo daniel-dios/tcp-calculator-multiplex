@@ -1,0 +1,5 @@
+rootProject.name = 'tcp-calculator-multiplex'
+include 'server'
+include 'client'
+include 'golden'
+
