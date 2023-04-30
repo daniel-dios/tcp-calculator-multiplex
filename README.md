@@ -53,8 +53,7 @@ recibida como su resultado son mostrados por pantalla en el servidor junto a la 
 
 Si la operación no puede ser realizada o se produce un error (ej. división por cero,
 factorial de un número negativo, desbordamiento, etc.), el acumulador no será modificado. En este caso, se enviará al
-cliente un
-mensaje de error y el valor del acumulador. A continuación, el servidor espera a que llegue la siguiente operación del
+cliente un mensaje de error y el valor del acumulador. A continuación, el servidor espera a que llegue la siguiente operación del
 cliente como siempre. Es obligatorio detectar, como mínimo, la división por cero, devolviendo el error correspondiente
 al cliente.
 
