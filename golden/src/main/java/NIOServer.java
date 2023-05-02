@@ -9,6 +9,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class NIOServer {
 
@@ -21,7 +22,7 @@ public class NIOServer {
 
 
     private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
-    private int udpAccumulator = 0;
+    private final AtomicInteger udpAccumulator = new AtomicInteger(0);
 
     public static void main(String[] args) {
         new NIOServer().start();
@@ -97,10 +98,9 @@ public class NIOServer {
             buffer.flip();
             final byte b = buffer.get();
             System.out.println("Mensaje UDP recibido: " + b);
-            System.out.println("Received: " + b + "for UDP clients the accumulator was: " + udpAccumulator + " and now: " + (udpAccumulator + b));
-            udpAccumulator += b;
+            System.out.println("Received: " + b + "for UDP clients the accumulator was: " + udpAccumulator.get() + " and now: " + udpAccumulator.addAndGet(b));
             buffer.clear();
-            buffer.put((byte) udpAccumulator);
+            buffer.put((byte) udpAccumulator.get());
             buffer.flip();
 
             udpChannel.send(buffer, clientAddress);
