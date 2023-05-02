@@ -18,10 +18,12 @@ public class NIOClient {
         final var scanner = new Scanner(System.in);
 
         for (int i = 0; i < 10; i++) {
+            System.out.println("Press enter");
             scanner.nextLine();
             buffer.put((byte) i);
             buffer.flip();
             client.write(buffer);
+            System.out.println("Sent " + i);
 
             buffer.clear();
             client.read(buffer);

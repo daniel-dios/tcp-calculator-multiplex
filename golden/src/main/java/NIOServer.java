@@ -2,7 +2,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
-import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -17,6 +16,7 @@ public class NIOServer {
     private final int port = 8080;
     private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
     private final AtomicInteger udpAccumulator = new AtomicInteger(0);
+
     public NIOServer() {
     }
 
@@ -28,15 +28,8 @@ public class NIOServer {
         try {
             final var selector = Selector.open();
 
-            final var tcpServer = ServerSocketChannel.open();
-            tcpServer.bind(new InetSocketAddress(port));
-            tcpServer.configureBlocking(false);
-            tcpServer.register(selector, SelectionKey.OP_ACCEPT);
-
-            final var udpServer = DatagramChannel.open();
-            udpServer.bind(new InetSocketAddress(port));
-            udpServer.configureBlocking(false);
-            udpServer.register(selector, SelectionKey.OP_READ);
+            startTCP(selector);
+            startUDP(selector);
 
             System.out.println("Listening forever...");
             while (true) {
@@ -51,13 +44,33 @@ public class NIOServer {
                     if (key.isAcceptable()) {
                         accept(selector, (ServerSocketChannel) channel);
                     } else if (key.isReadable()) {
-                        handleConnection(channel);
+                        if (channel instanceof SocketChannel) {
+                            handleTCP((SocketChannel) channel);
+                        } else if (channel instanceof DatagramChannel) {
+                            handleUDP((DatagramChannel) channel);
+                        }
                     }
                 }
             }
         } catch (Exception ex) {
             System.out.println("Problem with " + ex);
         }
+    }
+
+    private void startTCP(final Selector selector) throws IOException {
+        final var tcpServer = ServerSocketChannel.open();
+        tcpServer.bind(new InetSocketAddress(port));
+        tcpServer.configureBlocking(false);
+        tcpServer.register(selector, SelectionKey.OP_ACCEPT);
+        System.out.println("TCP ready.");
+    }
+
+    private void startUDP(final Selector selector) throws IOException {
+        final var udpServer = DatagramChannel.open();
+        udpServer.bind(new InetSocketAddress(port));
+        udpServer.configureBlocking(false);
+        udpServer.register(selector, SelectionKey.OP_READ);
+        System.out.println("UDP ready.");
     }
 
     private void accept(final Selector selector, final ServerSocketChannel channel) {
@@ -72,40 +85,30 @@ public class NIOServer {
         }
     }
 
-    private void handleConnection(final SelectableChannel channel) {
-        if (channel instanceof SocketChannel) {
-            System.out.println("Handling TCP");
-            handleTCP((SocketChannel) channel);
-        } else if (channel instanceof DatagramChannel) {
+    private void handleUDP(final DatagramChannel udpChannel) {
+        try {
             System.out.println("Handling UDP");
-            try {
-                handleUDP((DatagramChannel) channel);
-            } catch (IOException e) {
-                System.out.println("Problem with " + e.getMessage());
+            var buffer = ByteBuffer.allocate(size);
+            var clientAddress = (InetSocketAddress) udpChannel.receive(buffer);
+
+            if (clientAddress != null) {
+                buffer.flip();
+                final byte b = buffer.get();
+                System.out.println("Mensaje UDP recibido: " + b);
+                System.out.println("Received: " + b + "for UDP clients the accumulator was: " + udpAccumulator.get() + " and now: " + udpAccumulator.addAndGet(b));
+                buffer.clear();
+                buffer.put((byte) udpAccumulator.get());
+                buffer.flip();
+                udpChannel.send(buffer, clientAddress);
             }
-        }
-    }
-
-    private void handleUDP(final DatagramChannel udpChannel) throws IOException {
-        var buffer = ByteBuffer.allocate(size);
-        var clientAddress = (InetSocketAddress) udpChannel.receive(buffer);
-
-        if (clientAddress != null) {
-            buffer.flip();
-            final byte b = buffer.get();
-            System.out.println("Mensaje UDP recibido: " + b);
-            System.out.println("Received: " + b + "for UDP clients the accumulator was: " + udpAccumulator.get() + " and now: " + udpAccumulator.addAndGet(b));
-            buffer.clear();
-            buffer.put((byte) udpAccumulator.get());
-            buffer.flip();
-
-            udpChannel.send(buffer, clientAddress);
+        } catch (Exception ex) {
+            System.out.println("UDP Problem with " + ex.getMessage());
         }
     }
 
     private void handleTCP(final SocketChannel clientChannel) {
         try {
-
+            System.out.println("Handling TCP");
             var buffer = ByteBuffer.allocate(size);
             int bytesRead = clientChannel.read(buffer);
             if (bytesRead == -1) {
@@ -126,7 +129,7 @@ public class NIOServer {
                 clientChannel.write(buffer);
             }
         } catch (Exception exception) {
-            System.out.println("Problem with " + exception.getMessage());
+            System.out.println("TCP Problem with " + exception.getMessage());
         }
     }
 }
