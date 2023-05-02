@@ -18,7 +18,6 @@ public class NIOServer {
     private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
     private final AtomicInteger udpAccumulator = new AtomicInteger(0);
     public NIOServer() {
-
     }
 
     public static void main(String[] args) {
