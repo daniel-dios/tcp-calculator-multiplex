@@ -15,14 +15,11 @@ public class NIOServer {
 
     private final int size = 1;
     private final int port = 8080;
-
+    private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
+    private final AtomicInteger udpAccumulator = new AtomicInteger(0);
     public NIOServer() {
 
     }
-
-
-    private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
-    private final AtomicInteger udpAccumulator = new AtomicInteger(0);
 
     public static void main(String[] args) {
         new NIOServer().start();
