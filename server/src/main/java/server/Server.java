@@ -1,21 +1,27 @@
 package server;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.Optional;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import server.encoder.AnswerEncoder;
 import server.operation.OperationDecoder;
 
 public class Server {
 
-    public static final int READ_EXIT_CODE = -1;
-    public static final int MAX_FROM_CLIENT = 4;
+    private static final int MAX_FROM_CLIENT = 4;
     private final ServerParameters params;
     private final AnswerEncoder answerEncoder;
     private final OperationDecoder operationDecoder;
+    private final Map<SocketChannel, Accumulator> accumulatorsTCP = new ConcurrentHashMap<>();
+    private Accumulator accumulatorUDP = new Accumulator(0);
 
     public Server(
             final ServerParameters params,
@@ -27,101 +33,216 @@ public class Server {
         this.operationDecoder = operationDecoder;
     }
 
+    @SuppressWarnings("InfiniteLoopStatement")
     public void startListeningBlocking() {
-        tryToOpenSocket(params.getPort())
-                .ifPresentOrElse(
-                        this::acceptingConnections,
-                        () -> System.out.println("Impossible to connect")
-                );
-        System.out.println("See you soon.");
-    }
-
-    private void acceptingConnections(final ServerSocket socket) {
         try {
+            final var selector = openSelector();
+
+            startTCP(selector);
+            startUDP(selector);
+
+            System.out.println("Listening forever...");
             while (true) {
-                System.out.println("Listening...");
-                final Socket clientSocket = socket.accept();
-                new Thread(() -> handleNewConnection(clientSocket)).start();
-            }
-        } catch (IOException e) {
-            System.out.println("Problem with " + e.getMessage());
-        }
-    }
+                selector.select();
 
-    private void handleNewConnection(
-            final Socket clientSocket
-    ) {
-        final var accumulator = new Accumulator(0);
-        final var logger = new ClientPrinter(clientSocket.getInetAddress(), clientSocket.getPort());
-        logger.info("connection accepted!");
-        try (
-                final var in = clientSocket.getInputStream();
-                final var out = clientSocket.getOutputStream()
-        ) {
-            final var buffer = new byte[MAX_FROM_CLIENT];
-            while (in.read(buffer) != READ_EXIT_CODE) {
+                var selectedKeys = selector.selectedKeys().iterator();
+                while (selectedKeys.hasNext()) {
+                    var key = selectedKeys.next();
+                    selectedKeys.remove();
 
-                final var decode = operationDecoder.decode(buffer);
-                if (decode.isPresent()) {
-                    final var operation = decode.get();
-                    logger.info("Received the operation: " + operation.toReadableFormat());
-                    final var solution = operation.solve();
-                    if (solution.success) {
-                        logger.info("Solved: " + operation.toReadableFormat() + " = " + solution);
-                        try {
-                            logger.info("Accumulator before adding solution is:" + accumulator.getValue());
-                            accumulator.accumulate(solution.result);
-                            logger.info("Accumulator after accumulation is: " + accumulator.getValue());
-                            out.write(answerEncoder.encode(accumulator.getValue()));
-                            logger.info("Answered: " + accumulator);
-                        } catch (Accumulator.AccumulatorMax e) {
-                            sendError(logger, out, accumulator.getValue(), "Accumulator can't increase with the operation result.");
-                        } catch (Accumulator.AccumulatorMin e) {
-                            sendError(logger, out, accumulator.getValue(), "Accumulator can't decrease with the operation result.");
+                    final var channel = key.channel();
+                    if (key.isAcceptable()) {
+                        if (channel instanceof ServerSocketChannel) {
+                            accept(selector, (ServerSocketChannel) channel);
+                        } else {
+                            System.out.println("Acceptable key is not instance of ServerSocketChannel");
                         }
-                    } else {
-                        logger.info("Problem solving: " + operation.toReadableFormat() + ", error: " + solution.reason);
-                        sendError(logger, out, accumulator.getValue(), solution.reason);
+                    } else if (key.isReadable()) {
+                        if (channel instanceof SocketChannel) {
+                            handleTCP((SocketChannel) channel);
+                        } else if (channel instanceof DatagramChannel) {
+                            handleUDP((DatagramChannel) channel);
+                        }
                     }
-                } else {
-                    sendError(logger, out, accumulator.getValue(), "invalid input");
                 }
             }
+        } catch (SelectorException ex) {
+            System.out.println("Problem opening selector " + ex.getMessage());
+        } catch (TCPException ex) {
+            System.out.println("Problem opening TCP " + ex.getMessage());
+        } catch (UDPException ex) {
+            System.out.println("Problem opening UDP " + ex.getMessage());
         } catch (IOException e) {
-            logger.info("IOException with client reason:" + e.getMessage());
-        } finally {
-            logger.info("Connection closed with client.");
+            System.out.println("Problem selecting " + e.getMessage());
         }
     }
 
-    private void sendError(
-            final ClientPrinter logger,
-            final OutputStream out,
-            final long accumulatorValue,
-            final String reason
-    ) throws IOException {
-        out.write(answerEncoder.encode(accumulatorValue, reason));
-        logger.info("Answered accumulator: " + accumulatorValue + ", error: " + reason);
-    }
-
-    private Optional<ServerSocket> tryToOpenSocket(final int port) {
+    private static Selector openSelector() throws SelectorException {
         try {
-            return Optional.of(new ServerSocket(port));
+            return Selector.open();
         } catch (IOException e) {
-            System.out.println("Could not open the socket on port: " + port + ", reason: " + e.getMessage());
-            return Optional.empty();
+            throw new SelectorException(e.getMessage());
         }
     }
 
-    private static class ClientPrinter {
-        private final String header;
 
-        public ClientPrinter(final InetAddress inetAddress, final int port) {
-            this.header = "[IP '" + inetAddress.getHostAddress() + "', Port '" + port + "'] ";
+    private void startTCP(final Selector selector) throws TCPException {
+        try {
+            final var tcpServer = ServerSocketChannel.open();
+            tcpServer.bind(new InetSocketAddress(params.getPort()));
+            tcpServer.configureBlocking(false);
+            tcpServer.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("TCP ready.");
+        } catch (Exception ex) {
+            throw new TCPException(ex.getMessage());
         }
+    }
 
-        public void info(String message) {
-            System.out.println(header + message);
+    private void startUDP(final Selector selector) throws UDPException {
+        try {
+            final var udpServer = DatagramChannel.open();
+            udpServer.bind(new InetSocketAddress(params.getPort()));
+            udpServer.configureBlocking(false);
+            udpServer.register(selector, SelectionKey.OP_READ);
+            System.out.println("UDP ready.");
+        } catch (Exception ex) {
+            throw new UDPException(ex.getMessage());
+        }
+    }
+
+    private void accept(
+            final Selector selector,
+            final ServerSocketChannel channel
+    ) {
+        try {
+            var clientChannel = channel.accept();
+            System.out.println("[TCP]" + clientChannel.getRemoteAddress() + " accepted!");
+            clientChannel.configureBlocking(false);
+            clientChannel.register(selector, SelectionKey.OP_READ);
+            accumulatorsTCP.put(clientChannel, new Accumulator(0));
+            System.out.println("[TCP]" + clientChannel.getRemoteAddress() + " accumulator set to 0.");
+        } catch (Exception e) {
+            System.out.println("[TCP] Problem with " + e.getMessage());
+        }
+    }
+
+    private void handleUDP(final DatagramChannel udpChannel) {
+        final var logger = new Logger(udpChannel);
+        try {
+            final var request = ByteBuffer.allocate(MAX_FROM_CLIENT);
+            final var clientAddress = (InetSocketAddress) udpChannel.receive(request);
+
+            if (clientAddress != null) {
+                logger.info("Received raw:" + Arrays.toString(request.array()));
+                final var answer = handleUDPOperation(request.array(), logger);
+                udpChannel.write(ByteBuffer.wrap(answer));
+                logger.info("Replied with " + answer.length + "bytes");
+            }
+        } catch (Exception ex) {
+            logger.info("UDP Problem with " + ex.getMessage());
+        }
+    }
+
+    private void handleTCP(final SocketChannel clientChannel) {
+        final var logger = new Logger(clientChannel);
+        try {
+            final var request = ByteBuffer.allocate(MAX_FROM_CLIENT);
+            final var bytesRead = clientChannel.read(request);
+
+            if (bytesRead == -1) {
+                accumulatorsTCP.remove(clientChannel);
+                clientChannel.close();
+                return;
+            }
+
+            logger.info("Received raw:" + Arrays.toString(request.array()));
+            final var answer = handleTCPOperation(request.array(), clientChannel, logger);
+            clientChannel.write(ByteBuffer.wrap(answer));
+            logger.info("Replied with " + answer.length + "bytes");
+        } catch (Exception exception) {
+            logger.info("TCP Problem with " + exception.getMessage());
+        }
+    }
+
+    private byte[] handleTCPOperation(final byte[] array, SocketChannel socketChannel, final Logger logger) {
+        final var accumulator = accumulatorsTCP.get(socketChannel);
+        logger.info("Accumulator is: " + accumulator);
+        final var decode = operationDecoder.decode(array);
+        if (decode.isPresent()) {
+            final var operation = decode.get();
+            logger.info("Operation received is: " + operation.toReadableFormat());
+            final var solve = operation.solve();
+            if (solve.success) {
+                logger.info("Solved Operation: " + operation + "=" + solve.result);
+                try {
+                    accumulator.accumulate(solve.result);
+                    accumulatorsTCP.put(socketChannel, accumulator);
+                    logger.info("New accumulator is: " + accumulator.getValue() + ", stored: " + accumulatorsTCP.get(socketChannel));
+                    return answerEncoder.encode(accumulator.getValue());
+                } catch (Accumulator.AccumulatorMax e) {
+                    logger.info("Accumulator cant increase due to limit, replying with old accumulator: " + accumulator.getValue());
+                    return answerEncoder.encodeWithError(accumulator.getValue(), "Accumulator can't increase with the operation result.");
+                } catch (Accumulator.AccumulatorMin e) {
+                    logger.info("Accumulator cant decrease due to limit, replying with old accumulator: " + accumulator.getValue());
+                    return answerEncoder.encodeWithError(accumulator.getValue(), "Accumulator can't decrease with the operation result.");
+                }
+            } else {
+                logger.info("Operation can't be solved: " + solve.reason + "replying with old accumulator: " + accumulator.getValue());
+                return answerEncoder.encodeWithError(accumulator.getValue(), solve.reason);
+            }
+        } else {
+            logger.info("Input invalid, replying with old accumulator: " + accumulator.getValue());
+            return answerEncoder.encodeWithError(accumulator.getValue(), "invalid input");
+        }
+    }
+
+    private byte[] handleUDPOperation(final byte[] array, final Logger logger) {
+        final var accumulator = this.accumulatorUDP;
+        logger.info("Accumulator is: " + accumulator);
+        final var decode = operationDecoder.decode(array);
+        if (decode.isPresent()) {
+            final var operation = decode.get();
+            logger.info("Operation received is: " + operation.toReadableFormat());
+            final var solve = operation.solve();
+            if (solve.success) {
+                logger.info("Solved Operation: " + operation + "=" + solve.result);
+                try {
+                    accumulator.accumulate(solve.result);
+                    this.accumulatorUDP = accumulator;
+                    logger.info("New accumulator is: " + accumulator.getValue() + ", stored: " + this.accumulatorUDP);
+                    return answerEncoder.encode(accumulator.getValue());
+                } catch (Accumulator.AccumulatorMax e) {
+                    logger.info("Accumulator cant increase due to limit, replying with old accumulator: " + accumulator.getValue());
+                    return answerEncoder.encodeWithError(accumulator.getValue(), "Accumulator can't increase with the operation result.");
+                } catch (Accumulator.AccumulatorMin e) {
+                    logger.info("Accumulator cant decrease due to limit, replying with old accumulator: " + accumulator.getValue());
+                    return answerEncoder.encodeWithError(accumulator.getValue(), "Accumulator can't decrease with the operation result.");
+                }
+            } else {
+                logger.info("Operation can't be solved: " + solve.reason + "replying with old accumulator: " + accumulator.getValue());
+                return answerEncoder.encodeWithError(accumulator.getValue(), solve.reason);
+            }
+        } else {
+            logger.info("Input invalid, replying with old accumulator: " + accumulator.getValue());
+            return answerEncoder.encodeWithError(accumulator.getValue(), "invalid input");
+        }
+    }
+
+    private static class UDPException extends Throwable {
+        public UDPException(final String message) {
+            super(message);
+        }
+    }
+
+    private static class TCPException extends Throwable {
+        public TCPException(final String message) {
+            super(message);
+        }
+    }
+
+    private static class SelectorException extends Throwable {
+        public SelectorException(final String message) {
+            super(message);
         }
     }
 }
