@@ -9,7 +9,7 @@ public class NIOClient {
     private static final String HOST = "localhost";
     private static final int PORT = 8080;
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws IOException {
         final var serverAddress = new InetSocketAddress(HOST, PORT);
 
         final var client = SocketChannel.open(serverAddress);

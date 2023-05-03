@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class NIOServer {
 
-    private final int size = 1;
+    private final int size = 4;
     private final int port = 8080;
     private final Map<SocketChannel, Integer> accumulators = new HashMap<>();
     private final AtomicInteger udpAccumulator = new AtomicInteger(0);
@@ -42,7 +42,11 @@ public class NIOServer {
 
                     final var channel = key.channel();
                     if (key.isAcceptable()) {
-                        accept(selector, (ServerSocketChannel) channel);
+                        if (channel instanceof ServerSocketChannel) {
+                            accept(selector, (ServerSocketChannel) channel);
+                        } else {
+                            System.out.println("Acceptable key is not instance of ServerSocketChannel");
+                        }
                     } else if (key.isReadable()) {
                         if (channel instanceof SocketChannel) {
                             handleTCP((SocketChannel) channel);
@@ -75,11 +79,12 @@ public class NIOServer {
 
     private void accept(final Selector selector, final ServerSocketChannel channel) {
         try {
-            System.out.println("New acceptable key!");
             var clientChannel = channel.accept();
+            System.out.println("Client accepted! " + clientChannel.getRemoteAddress());
             clientChannel.configureBlocking(false);
             clientChannel.register(selector, SelectionKey.OP_READ);
             accumulators.put(clientChannel, 0);
+            System.out.println("Accumulator set to 0 for " + clientChannel.getRemoteAddress());
         } catch (Exception e) {
             System.out.println("Problem with " + e.getMessage());
         }
