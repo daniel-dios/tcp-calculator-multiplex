@@ -14,10 +14,10 @@ tendrá su propio acumulador independiente.
 
 Los detalles de ambos programas son los siguientes:
 
-## El cliente (tcpmtcli)
+## El cliente (tcpmpcli)
 
 Sinopsis
-tcpmtcli direccion_ip_servidor numero_puerto_servidor
+tcpmpcli direccion_ip_servidor numero_puerto_servidor
 
 ### Comportamiento
 
@@ -38,10 +38,10 @@ Uso de UDP en vez de TCP (8 puntos)
 Si la línea de comandos del cliente incluye el flag -u, el programa usará UDP en vez de TCP para comunicarse con el
 servidor.
 
-## El servidor (tcpmtser)
+## El servidor (tcpmpser)
 
 Sinopsis
-tcpmtser num_puerto
+tcpmpser num_puerto
 
 ### Comportamiento
 
