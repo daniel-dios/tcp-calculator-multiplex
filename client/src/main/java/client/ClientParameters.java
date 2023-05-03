@@ -8,18 +8,24 @@ public class ClientParameters {
 
     private final InetAddress address;
     private final int port;
+    private final boolean isUDP;
 
     public ClientParameters(
             final InetAddress address,
-            final int port
-    ) {
+            final int port,
+            final boolean isUDP) {
         this.address = address;
         this.port = port;
+        this.isUDP = isUDP;
     }
 
     public static Optional<ClientParameters> parse(final String[] args) {
-        if (args.length != 2) {
-            System.out.println("Args are not 2");
+        if (args.length != 2 && args.length != 3) {
+            System.out.println("Args are not 2 (or 3 for udp)");
+            return Optional.empty();
+        }
+
+        if (args.length == 3 && !args[2].equals("-u")) {
             return Optional.empty();
         }
 
@@ -29,8 +35,10 @@ public class ClientParameters {
             return Optional.of(
                     new ClientParameters(
                             address,
-                            port
-                    ));
+                            port,
+                            args.length == 3 && args[2].equals("-u")
+                    )
+            );
         } catch (UnknownHostException e) {
             System.out.println("First param is not an IP.");
             return Optional.empty();
@@ -46,5 +54,9 @@ public class ClientParameters {
 
     public int getPort() {
         return port;
+    }
+
+    public boolean isUDP() {
+        return this.isUDP;
     }
 }

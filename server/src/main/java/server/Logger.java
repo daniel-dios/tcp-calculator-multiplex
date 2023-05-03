@@ -1,20 +1,14 @@
 package server;
 
 import java.io.IOException;
-import java.nio.channels.DatagramChannel;
+import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 
 public class Logger {
     private final String header;
 
-    public Logger(final DatagramChannel datagramChannel) {
-        final var builder = new StringBuilder().append("[UDP] ");
-        try {
-            builder.append(datagramChannel.getRemoteAddress());
-        } catch (IOException e) {
-            // blank
-        }
-        this.header = builder.toString();
+    public Logger(final InetSocketAddress address) {
+        this.header = String.format("[UDP] %s:%d ", address.getAddress(), address.getPort());
     }
 
     public Logger(final SocketChannel socketChannel) {
@@ -24,7 +18,7 @@ public class Logger {
         } catch (IOException e) {
             // blank
         }
-        this.header = builder.toString();
+        this.header = builder.append("  ").toString();
     }
 
     public void info(String message) {

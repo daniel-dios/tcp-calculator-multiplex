@@ -15,7 +15,7 @@ import server.encoder.AnswerEncoder;
 import server.operation.OperationDecoder;
 
 public class Server {
-
+    private static final String SEPARATOR = "------------------------------------------------------------------";
     private static final int MAX_FROM_CLIENT = 4;
     private final ServerParameters params;
     private final AnswerEncoder answerEncoder;
@@ -47,6 +47,7 @@ public class Server {
 
                 var selectedKeys = selector.selectedKeys().iterator();
                 while (selectedKeys.hasNext()) {
+                    System.out.println(SEPARATOR);
                     var key = selectedKeys.next();
                     selectedKeys.remove();
 
@@ -127,19 +128,18 @@ public class Server {
     }
 
     private void handleUDP(final DatagramChannel udpChannel) {
-        final var logger = new Logger(udpChannel);
         try {
             final var request = ByteBuffer.allocate(MAX_FROM_CLIENT);
             final var clientAddress = (InetSocketAddress) udpChannel.receive(request);
-
             if (clientAddress != null) {
+                final var logger = new Logger(clientAddress);
                 logger.info("Received raw:" + Arrays.toString(request.array()));
                 final var answer = handleUDPOperation(request.array(), logger);
-                udpChannel.write(ByteBuffer.wrap(answer));
-                logger.info("Replied with " + answer.length + "bytes");
+                udpChannel.send(ByteBuffer.wrap(answer), clientAddress);
+                logger.info("Replied with " + answer.length + "bytes: " + Arrays.toString(answer));
             }
         } catch (Exception ex) {
-            logger.info("UDP Problem with " + ex.getMessage());
+            System.out.println("UDP Problem with " + ex.getMessage());
         }
     }
 
@@ -158,13 +158,14 @@ public class Server {
             logger.info("Received raw:" + Arrays.toString(request.array()));
             final var answer = handleTCPOperation(request.array(), clientChannel, logger);
             clientChannel.write(ByteBuffer.wrap(answer));
-            logger.info("Replied with " + answer.length + "bytes");
+            logger.info("Replied with " + answer.length + "bytes: " + Arrays.toString(answer));
         } catch (Exception exception) {
             logger.info("TCP Problem with " + exception.getMessage());
         }
     }
 
     private byte[] handleTCPOperation(final byte[] array, SocketChannel socketChannel, final Logger logger) {
+        System.out.println(SEPARATOR);
         final var accumulator = accumulatorsTCP.get(socketChannel);
         logger.info("Accumulator is: " + accumulator);
         final var decode = operationDecoder.decode(array);
@@ -173,7 +174,7 @@ public class Server {
             logger.info("Operation received is: " + operation.toReadableFormat());
             final var solve = operation.solve();
             if (solve.success) {
-                logger.info("Solved Operation: " + operation + "=" + solve.result);
+                logger.info("Solved Operation: " + operation.toReadableFormat() + "=" + solve.result);
                 try {
                     accumulator.accumulate(solve.result);
                     accumulatorsTCP.put(socketChannel, accumulator);
@@ -198,14 +199,14 @@ public class Server {
 
     private byte[] handleUDPOperation(final byte[] array, final Logger logger) {
         final var accumulator = this.accumulatorUDP;
-        logger.info("Accumulator is: " + accumulator);
+        logger.info("Accumulator before operation: " + accumulator);
         final var decode = operationDecoder.decode(array);
         if (decode.isPresent()) {
             final var operation = decode.get();
             logger.info("Operation received is: " + operation.toReadableFormat());
             final var solve = operation.solve();
             if (solve.success) {
-                logger.info("Solved Operation: " + operation + "=" + solve.result);
+                logger.info("Solved Operation: " + operation.toReadableFormat() + "=" + solve.result);
                 try {
                     accumulator.accumulate(solve.result);
                     this.accumulatorUDP = accumulator;

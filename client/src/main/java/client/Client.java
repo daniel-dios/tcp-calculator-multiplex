@@ -6,6 +6,8 @@ import client.operation.Symbol;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -78,6 +80,44 @@ public class Client {
                 continue;
             }
             readAnswerFromServer(dataInputStream);
+        }
+        System.out.println("Connection ended.");
+    }
+
+
+    public void startTalkingUDP() {
+        System.out.println("Going with UDP in address:'" + p.getAddress() + "', port:'" + p.getPort() + "'");
+        printInstructions();
+        final var scanner = new Scanner(System.in);
+        try (final var ds = new DatagramSocket()) {
+            ds.setSoTimeout((int) TIMEOUT_FOR_ESTABLISH.toMillis());
+
+            while (true) {
+                System.out.println(SEPARATOR);
+                System.out.println("Insert next operation.");
+                final var s = scanner.nextLine();
+                if ("QUIT".equals(s)) {
+                    break;
+                }
+                final var operation = operationReader.parse(s);
+                if (operation.isEmpty()) {
+                    System.out.println("Operation inserted not valid, please try again.");
+                    continue;
+                }
+                System.out.println("Inserted: " + operation.get().toReadableFormat());
+
+                final var encode = operation.get().encode();
+                ds.send(new DatagramPacket(encode, encode.length, p.getAddress(), p.getPort()));
+                System.out.println("Operation sent to the server.");
+
+                final var receiveData = new byte[1024];
+                ds.receive(new DatagramPacket(receiveData, receiveData.length));
+                System.out.println("Answer from server: " + answerDecoder.decodeVariable(receiveData));
+            }
+        } catch (SocketTimeoutException e) {
+            System.out.println("No answer from the server after timeout of " + TIMEOUT_FOR_ESTABLISH.getSeconds() + "s: " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("Problem writing/reading to/from the server: " + e.getMessage());
         }
         System.out.println("Connection ended.");
     }
