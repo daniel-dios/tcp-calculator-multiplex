@@ -35,10 +35,10 @@ public class tcpmpcli {
         System.out.println("\tadd at the end -u for UDP client (optional)");
         System.out.println();
         System.out.println("Example:");
-        System.out.println("tcpmpcli 0.0.0.0 8081");
-        System.out.println("java tcpmpcli 0.0.0.0 8081");
+        System.out.println("tcpmpcli 127.0.0.1 8081");
+        System.out.println("java tcpmpcli 127.0.0.1 8081");
         System.out.println("Example for UDP:");
-        System.out.println("tcpmpcli 0.0.0.0 8081 -u");
-        System.out.println("java tcpmpcli 0.0.0.0 8081 -u");
+        System.out.println("tcpmpcli 127.0.0.1 8081 -u");
+        System.out.println("java tcpmpcli 127.0.0.1 8081 -u");
     }
 }
