@@ -32,7 +32,7 @@ class AnswerEncoderTest {
 
     @Test
     void shouldEncodeFailure() {
-        assertThat(answerEncoder.encode(-525, "Can not divide by 0"))
+        assertThat(answerEncoder.encodeWithError(-525, "Can not divide by 0"))
                 .isEqualTo(toByteArray(
                         10, 31, 11, 19, 67, 97, 110, 32, 110, 111, 116, 32, 100, 105, 118, 105, 100,
                         101, 32, 98, 121, 32, 48, 16, 8, -1, -1, -1, -1, -1, -1, -3, -13

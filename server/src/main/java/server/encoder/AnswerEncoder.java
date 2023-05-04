@@ -24,7 +24,7 @@ public class AnswerEncoder {
                 .array();
     }
 
-    public byte[] encode(
+    public byte[] encodeWithError(
             final long value,
             final String text
     ) {

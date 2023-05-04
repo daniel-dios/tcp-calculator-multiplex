@@ -20,7 +20,7 @@ public class GoldenTest {
 
     @Test
     void shouldEncodeDecodeFailure() {
-        final var bytes = encoder.encode(10, "Can't divide by 0.");
+        final var bytes = encoder.encodeWithError(10, "Can't divide by 0.");
         final var actual = decoder.decodeVariable(bytes);
 
         assertThat(actual)

@@ -11,7 +11,7 @@ public class Accumulator {
         this.value = value;
     }
 
-    public void accumulate(long input) throws AccumulatorMax, AccumulatorMin {
+    void accumulate(long input) throws AccumulatorMax, AccumulatorMin {
         if (input >= 0 && MAX_VALUE - input < value) {
             throw new AccumulatorMax();
         } else if (input < 0 && MIN_VALUE - input > value) {
@@ -19,6 +19,11 @@ public class Accumulator {
         } else {
             value += input;
         }
+    }
+
+    public Accumulator accumulateInmutable(long input) throws AccumulatorMax, AccumulatorMin {
+        accumulate(input);
+        return new Accumulator(this.value);
     }
 
     @Override
