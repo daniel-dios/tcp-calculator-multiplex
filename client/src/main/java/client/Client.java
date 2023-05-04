@@ -54,7 +54,7 @@ public class Client {
             return;
         }
 
-        printInstructions();
+        printInstructions(true);
 
         while (true) {
             System.out.println(SEPARATOR);
@@ -85,41 +85,30 @@ public class Client {
     }
 
 
-    public void startTalkingUDP() {
-        System.out.println("Going with UDP in address:'" + p.getAddress() + "', port:'" + p.getPort() + "'");
-        printInstructions();
-        final var scanner = new Scanner(System.in);
+    public void talkUDP(String operationRaw) {
+        final var operation = operationReader.parse(operationRaw);
+        if (operation.isEmpty()) {
+            printInstructions(false);
+            System.out.println("Operation inserted not valid, please try again.");
+            return;
+        }
+        System.out.println("Trying with UDP in address:'" + p.getAddress() + "', port:'" + p.getPort() + "'");
         try (final var ds = new DatagramSocket()) {
             ds.setSoTimeout((int) TIMEOUT_FOR_ESTABLISH.toMillis());
 
-            while (true) {
-                System.out.println(SEPARATOR);
-                System.out.println("Insert next operation.");
-                final var s = scanner.nextLine();
-                if ("QUIT".equals(s)) {
-                    break;
-                }
-                final var operation = operationReader.parse(s);
-                if (operation.isEmpty()) {
-                    System.out.println("Operation inserted not valid, please try again.");
-                    continue;
-                }
-                System.out.println("Inserted: " + operation.get().toReadableFormat());
-
-                final var encode = operation.get().encode();
-                ds.send(new DatagramPacket(encode, encode.length, p.getAddress(), p.getPort()));
-                System.out.println("Operation sent to the server.");
-
-                final var receiveData = new byte[1024];
-                ds.receive(new DatagramPacket(receiveData, receiveData.length));
-                System.out.println("Answer from server: " + answerDecoder.decodeVariable(receiveData));
-            }
+            System.out.println("Sending: " + operation.get().toReadableFormat());
+            final var encode = operation.get().encode();
+            ds.send(new DatagramPacket(encode, encode.length, p.getAddress(), p.getPort()));
+            System.out.println("Operation sent to the server.");
+            final var receiveData = new byte[1024];
+            ds.receive(new DatagramPacket(receiveData, receiveData.length));
+            System.out.println("Answer from server: " + answerDecoder.decodeVariable(receiveData));
         } catch (SocketTimeoutException e) {
             System.out.println("No answer from the server after timeout of " + TIMEOUT_FOR_ESTABLISH.getSeconds() + "s: " + e.getMessage());
         } catch (IOException e) {
             System.out.println("Problem writing/reading to/from the server: " + e.getMessage());
         }
-        System.out.println("Connection ended.");
+        System.out.println("Closed!");
     }
 
     private void readAnswerFromServer(final DataInputStream dataInputStream) {
@@ -138,14 +127,14 @@ public class Client {
         }
     }
 
-    private void printInstructions() {
+    private void printInstructions(boolean quit) {
         System.out.println(SEPARATOR);
         System.out.println("Please insert the operation in infix notation: A o B ('o' between space)");
         System.out.println("Numbers (A, B): must be in range [" + OperationReader.MIN_VALUE + ", " + OperationReader.MAX_VALUE + "]");
         System.out.println("Operations (o): Any of:" + stream(Symbol.values()).map(Symbol::toSymbol).collect(Collectors.toList()) + ")");
         System.out.println("Example:");
         System.out.println("1 + 2");
-        System.out.println("Type QUIT for exit.");
+        if (quit) System.out.println("Type QUIT for exit.");
         System.out.println(SEPARATOR);
     }
 }

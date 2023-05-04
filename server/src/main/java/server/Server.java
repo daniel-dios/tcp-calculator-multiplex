@@ -133,7 +133,7 @@ public class Server {
             final var clientAddress = (InetSocketAddress) udpChannel.receive(request);
             if (clientAddress != null) {
                 final var logger = new Logger(clientAddress);
-                logger.info("Received raw:" + Arrays.toString(request.array()));
+                logger.info("Received a message of:" + request.array().length + "bytes.");
                 final var answer = handleUDPOperation(request.array(), logger);
                 udpChannel.send(ByteBuffer.wrap(answer), clientAddress);
                 logger.info("Replied with " + answer.length + "bytes: " + Arrays.toString(answer));
@@ -155,7 +155,7 @@ public class Server {
                 return;
             }
 
-            logger.info("Received raw:" + Arrays.toString(request.array()));
+            logger.info("Received a message of:" + request.array().length + "bytes.");
             final var answer = handleTCPOperation(request.array(), clientChannel, logger);
             clientChannel.write(ByteBuffer.wrap(answer));
             logger.info("Replied with " + answer.length + "bytes: " + Arrays.toString(answer));
