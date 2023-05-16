@@ -16,7 +16,7 @@ public class tcpmpcli {
     private static void talk(final ClientParameters params) {
         final var client = new Client(params, new AnswerDecoder(), new OperationReader());
         if (params.isUDP()) {
-            System.out.println("Using TCP mode.");
+            System.out.println("Using UDP mode.");
             client.talkUDP(params.getOperationUDP());
         } else {
             System.out.println("Using TCP mode.");
